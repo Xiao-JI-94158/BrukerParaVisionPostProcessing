@@ -8,14 +8,79 @@ import numpy as np
 
 
 class BrukerSpSpEpi(object):
+    """
+        The Class that read, stores, and (post)-processes Bruker SpSpEPI data
+    """
+    
+    def __init__(self, dataset_path:str="", exp_nbr:int=0) -> None:
+        """
+        """
+        
+        self.dataset_path = dataset_path
+        self.exp_nbr = exp_nbr
+        
+        self.data_paths_dict = {}
+        self._update_data_paths()
+        
+        self.method_dict = {}
+        self.acqp_dict = {}
+        
+        self.raw_fid = np.array([])
+        self.k_space_data = np.array([])
+        self.r_space_data = np.array([])
+
+        
+        self._update_param_dicts()
+        self._read_raw_fid()
+        self._reconstruct_k_space_data()
+        self._reconstruct_r_space_data()
+        
+
 
     
-    def __init__(self) -> None:
+    def _update_data_paths(self)->None:
+        
+        exp_path = os.path.join(self.dataset_path, str(self.exp_nbr)
+        if (not (os.isdir(exp_path))):
+            raise NotADirectoryError("Given directory of Experiment does not exist")
+
+        fid_path =  os.path.join(exp_path, "fid")
+        if (not (os.path.isfile(fid_path))):
+            raise FileNotFoundError("Cannot find FID file in the given directory of Experiment")
+        self.data_paths_dict['fid_path'] = fid_path
+
+        method_path = os.path.join(exp_path, "method")
+        if (not (os.path.isfile(method_path))):
+            raise FileNotFoundError("Cannot find METHOD file in the given directory of Experiment")
+        self.data_paths_dict['method_path'] = mehtod_path
+
+        acqp_path = os.path.join(exp_path, "acqp")
+        if (not (os.path.isfile(acqp_path))):
+            raise FileNotFoundError("Cannot find ACQP file in the given directory of Experiment")
+        self.data_paths_dict['acqp_path'] = acqp_path
+
+       
+
+    def _update_param_dicts(self)->None:
+        """
+        
+        """
         raise NotImplementedError
 
+    def _read_raw_fid(self)->None:
+        """
+        """
+        raise NotImplementedError
+    
+    def _reconstruct_k_space_data(self)->None:
+        """
+        """
+        raise NotImplementedError
 
-
-
+    def _reconstruct_r_space_data(self)->None:
+        """
+        """
+        raise NotImplementedError
 
 #    @property
 
