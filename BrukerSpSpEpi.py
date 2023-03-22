@@ -7,12 +7,14 @@ import numpy as np
 #In-house packages
 
 
+
+
 class BrukerSpSpEpi(object):
     """
         The Class that read, stores, and (post)-processes Bruker SpSpEPI data
     """
     
-    def __init__(self, dataset_path:str="", exp_nbr:int=0) -> None:
+    def __init__(self, dataset_path:str, exp_nbr:int) -> None:
         """
         """
         
@@ -24,6 +26,8 @@ class BrukerSpSpEpi(object):
         
         self.method_dict = {}
         self.acqp_dict = {}
+        
+        self._data_dimensionality_dict={}
         
         self.raw_fid = np.array([])
         self.k_space_data = np.array([])
