@@ -70,6 +70,13 @@ class BrukerSpSpEpi(object):
         
         """
         raise NotImplementedError
+        Basic Class that performs post-processing on EPI data acquired from Spectral-Spatial Selective Excitation (SpSp_EPI)
+    """
+
+    
+    def __init__(self, exp_path) -> None:
+        """
+            Constructor of the class
 
     def _read_raw_fid(self)->None:
         """
@@ -85,6 +92,18 @@ class BrukerSpSpEpi(object):
         """
         """
         raise NotImplementedError
+            param : exp_path, the path of dataset of the desired experiment
+            return : None
+            raise : 
+        """
+        raise NotImplementedError
+        raise FileNotFoundError
+        raise IsADirectoryError
+        raise 
+        pass
+
+
+
 
 #    @property
 
