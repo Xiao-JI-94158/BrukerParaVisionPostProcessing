@@ -11,7 +11,7 @@ import numpy as np
 
 class BrukerSpSpEpi(object):
     """
-        The Class that read, stores, and (post)-processes Bruker SpSpEPI data
+        Basic Class that that read, stores, and (post)-processes EPI data acquired from Spectral-Spatial Selective Excitation (SpSp_EPI)
     """
     
     def __init__(self, dataset_path:str, exp_nbr:int) -> None:
@@ -70,7 +70,7 @@ class BrukerSpSpEpi(object):
         
         """
         raise NotImplementedError
-        Basic Class that performs post-processing on EPI data acquired from Spectral-Spatial Selective Excitation (SpSp_EPI)
+        
     
 
     
@@ -100,3 +100,6 @@ class BrukerSpSpEpi(object):
 
 #    @property
 
+if __name__ == "__main__":
+
+    pass
