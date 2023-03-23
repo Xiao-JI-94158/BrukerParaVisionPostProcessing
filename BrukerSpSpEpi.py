@@ -159,10 +159,7 @@ class BrukerSpSpEpi(object):
         return result    
 
     
-    def __init__(self, exp_path) -> None:
-        """
-            Constructor of the class
-        """
+
 
     def _read_raw_fid(self)->None:
         """
