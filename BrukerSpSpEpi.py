@@ -67,9 +67,11 @@ class BrukerSpSpEpi(object):
 
     def _update_param_dicts(self)->None:
         """
-        Read a Bruker MRI experiment's method or acqp file to a
-        dictionary.
+        Read a Bruker MRI experiment's method or acqp file to a dictionary.
+
+        Ref: https://github.com/jdoepfert/brukerMRI
         """
+
         param_dict = {}
 
         with open(filepath, "r") as f:
@@ -108,7 +110,9 @@ class BrukerSpSpEpi(object):
         
 
     def _parse_array(current_file, line):
-
+        """
+        Ref: https://github.com/jdoepfert/brukerMRI
+        """
         # extract the arraysize and convert it to numpy
         line = line[1:-2].replace(" ", "").split(",")
         arraysize = np.array([int(x) for x in line])
@@ -140,7 +144,9 @@ class BrukerSpSpEpi(object):
             return vallist[0]
 
     def _parse_single_value(val):
-
+        """
+        Ref: https://github.com/jdoepfert/brukerMRI
+        """
         try: # check if int
             result = int(val)
         except ValueError:

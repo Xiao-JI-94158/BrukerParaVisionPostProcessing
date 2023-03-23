@@ -30,8 +30,9 @@ def validate_data_paths(dataset_path, exp_nbr):
 
 def read_param_file(filepath):
     """
-    Read a Bruker MRI experiment's method or acqp file to a
-    dictionary.
+    Read a Bruker MRI experiment's method or acqp file to a dictionary.
+
+    Ref: https://github.com/jdoepfert/brukerMRI
     """
     param_dict = {}
 
@@ -72,6 +73,10 @@ def read_param_file(filepath):
 
 
 def parse_array(current_file, line):
+    """
+    
+    Ref: https://github.com/jdoepfert/brukerMRI
+    """
 
     # extract the arraysize and convert it to numpy
     line = line[1:-2].replace(" ", "").split(",")
@@ -104,7 +109,10 @@ def parse_array(current_file, line):
         return vallist[0]
 
 def parse_single_value(val):
-
+    """
+    
+    Ref: https://github.com/jdoepfert/brukerMRI
+    """
     try: # check if int
         result = int(val)
     except ValueError:
