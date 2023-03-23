@@ -24,27 +24,20 @@ class BrukerSpSpEpi(object):
         self.data_paths_dict = {}
         self._update_data_paths()
         
-        self.method_dict = {}
-        self.acqp_dict = {}
+        self.method_dict = self._read_param_dicts(self.data_paths_dict['method_path'])
+        self.acqp_dict = self._read_param_dicts(self.data_paths_dict['acqp_path'])
         
         self._data_dimensionality_dict={}
         
-        self.raw_fid = np.array([])
-        self.k_space_data = np.array([])
-        self.r_space_data = np.array([])
+        self.raw_fid = self._read_raw_fid()
+        self.k_space_data = self._reconstruct_k_space_data()
+        self.r_space_data = self._reconstruct_r_space_data()
 
         
-        self._update_param_dicts()
-        self._read_raw_fid()
-        self._reconstruct_k_space_data()
-        self._reconstruct_r_space_data()
-        
-
-
     
     def _update_data_paths(self)->None:
         
-        exp_path = os.path.join(self.dataset_path, str(self.exp_nbr)
+        exp_path = os.path.join(self.dataset_path, str(self.exp_nbr))
         if (not (os.isdir(exp_path))):
             raise NotADirectoryError("Given directory of Experiment does not exist")
 
@@ -56,7 +49,7 @@ class BrukerSpSpEpi(object):
         method_path = os.path.join(exp_path, "method")
         if (not (os.path.isfile(method_path))):
             raise FileNotFoundError("Cannot find METHOD file in the given directory of Experiment")
-        self.data_paths_dict['method_path'] = mehtod_path
+        self.data_paths_dict['method_path'] = method_path
 
         acqp_path = os.path.join(exp_path, "acqp")
         if (not (os.path.isfile(acqp_path))):
@@ -65,7 +58,7 @@ class BrukerSpSpEpi(object):
 
        
 
-    def _update_param_dicts(self)->None:
+    def _read_param_dicts(self, filepath)->None:
         """
         Read a Bruker MRI experiment's method or acqp file to a dictionary.
 
@@ -87,7 +80,7 @@ class BrukerSpSpEpi(object):
 
                     # if current entry (current_line) is arraysize
                     if current_line[0:2] == "( " and current_line[-3:-1] == " )":
-                        value = _parse_array(f, current_line)
+                        value = self._parse_array(f, current_line)
 
                     # if current entry (current_line) is struct/list
                     elif current_line[0] == "(" and current_line[-3:-1] != " )":
@@ -97,11 +90,11 @@ class BrukerSpSpEpi(object):
                             current_line = current_line[0:-1] + f.readline()
 
                         # parse the values to a list
-                        value = [_parse_single_value(x) for x in current_line[1:-2].split(', ')]
+                        value = [self._parse_single_value(x) for x in current_line[1:-2].split(', ')]
 
                     # otherwise current entry must be single string or number
                     else:
-                        value = _parse_single_value(current_line)
+                        value = self._parse_single_value(current_line)
 
                     # save parsed value to dict
                     param_dict[param_name] = value
