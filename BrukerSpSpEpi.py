@@ -58,7 +58,7 @@ class BrukerSpSpEpi(object):
 
        
 
-    def _read_param_dicts(self, filepath)->None:
+    def _read_param_dicts(self, param_file_path):
         """
         Read a Bruker MRI experiment's method or acqp file to a dictionary.
 
@@ -67,7 +67,7 @@ class BrukerSpSpEpi(object):
 
         param_dict = {}
 
-        with open(filepath, "r") as f:
+        with open(param_file_path, "r") as f:
             while True:
                 line = f.readline()
                 if not line:

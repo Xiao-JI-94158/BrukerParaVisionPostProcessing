@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 
-def validate_data_paths(dataset_path, exp_nbr):
+def update_data_paths(dataset_path, exp_nbr)->dict:
     paths_dict = {}
     exp_path = os.path.join(dataset_path, str(exp_nbr))
     if (not (os.path.isdir(exp_path))):
@@ -28,7 +28,7 @@ def validate_data_paths(dataset_path, exp_nbr):
     return paths_dict
 
 
-def read_param_file(filepath):
+def read_param_file(filepath)->dict:
     """
     Read a Bruker MRI experiment's method or acqp file to a dictionary.
 
@@ -125,9 +125,22 @@ def parse_single_value(val):
     return result
 
  
-    
+def read_raw_fid(fid_path:str, fid_data_type:str)->np.ndarray:
+    """
+    Read the raw FID file of a Bruker MRI experiment to 1d numpy array AS IS.
+    NO reshaping.
+    """
+    raise NotImplementedError
 
+def _reconstruct_k_space_data(self)->None:
+    """
+    """
+    raise NotImplementedError
 
+def _reconstruct_r_space_data(self)->None:
+    """
+    """
+    raise NotImplementedError
 
 
 if __name__ == '__main__':
@@ -135,8 +148,8 @@ if __name__ == '__main__':
     exp_nbr = 21
 
 
-    paths_dict = validate_data_paths(dataset_path, exp_nbr)
-    method_dict = read_param_file(paths_dict['method_path'])
-    print(method_dict)
+    paths_dict = update_data_paths(dataset_path, exp_nbr)
+    acqp_dict = read_param_file(paths_dict['acqp_path'])
+    print(acqp_dict['ACQ_word_size'])
     
         
