@@ -4,12 +4,12 @@ import os
 # Third-party packages
 import numpy as np
 
-#In-house packages
+# In-house packages
 
 
 
 
-class BrukerSpSpEpi(object):
+class BrukerSpSpEpiExp(object):
     """
         Basic Class that that read, stores, and (post)-processes EPI data acquired from Spectral-Spatial Selective Excitation (SpSp_EPI)
     """
@@ -18,11 +18,10 @@ class BrukerSpSpEpi(object):
         """
         """
         
-        self.dataset_path = dataset_path
-        self.exp_nbr = exp_nbr
+        self.exp_path = os.path.join(dataset_path, str(exp_nbr))
         
-        self.data_paths_dict = {}
-        self._update_data_paths()
+        self.data_paths_dict = self._update_data_paths()
+        
         
         self.method_dict = self._read_param_dicts(self.data_paths_dict['method_path'])
         self.acqp_dict = self._read_param_dicts(self.data_paths_dict['acqp_path'])
@@ -36,26 +35,26 @@ class BrukerSpSpEpi(object):
         
     
     def _update_data_paths(self)->None:
+        data_paths_dict = {}
         
-        exp_path = os.path.join(self.dataset_path, str(self.exp_nbr))
-        if (not (os.isdir(exp_path))):
+        if (not (os.path.isdir(self.exp_path))):
             raise NotADirectoryError("Given directory of Experiment does not exist")
 
-        fid_path =  os.path.join(exp_path, "fid")
+        fid_path =  os.path.join(self.exp_path, "fid")
         if (not (os.path.isfile(fid_path))):
             raise FileNotFoundError("Cannot find FID file in the given directory of Experiment")
-        self.data_paths_dict['fid_path'] = fid_path
+        data_paths_dict['fid_path'] = fid_path
 
-        method_path = os.path.join(exp_path, "method")
+        method_path = os.path.join(self.exp_path, "method")
         if (not (os.path.isfile(method_path))):
             raise FileNotFoundError("Cannot find METHOD file in the given directory of Experiment")
-        self.data_paths_dict['method_path'] = method_path
+        data_paths_dict['method_path'] = method_path
 
-        acqp_path = os.path.join(exp_path, "acqp")
+        acqp_path = os.path.join(self.exp_path, "acqp")
         if (not (os.path.isfile(acqp_path))):
             raise FileNotFoundError("Cannot find ACQP file in the given directory of Experiment")
-        self.data_paths_dict['acqp_path'] = acqp_path
-
+        data_paths_dict['acqp_path'] = acqp_path
+        return data_paths_dict
        
 
     def _read_param_dicts(self, param_file_path):
@@ -102,7 +101,7 @@ class BrukerSpSpEpi(object):
         return param_dict
         
 
-    def _parse_array(current_file, line):
+    def _parse_array(self, current_file, line):
         """
         Ref: https://github.com/jdoepfert/brukerMRI
         """
@@ -136,7 +135,7 @@ class BrukerSpSpEpi(object):
         else:
             return vallist[0]
 
-    def _parse_single_value(val):
+    def _parse_single_value(self, val):
         """
         Ref: https://github.com/jdoepfert/brukerMRI
         """
@@ -157,23 +156,26 @@ class BrukerSpSpEpi(object):
     def _read_raw_fid(self)->None:
         """
         """
-        raise NotImplementedError
+        # raise NotImplementedError
+        pass
     
     def _reconstruct_k_space_data(self)->None:
         """
         """
-        raise NotImplementedError
+        # raise NotImplementedError
+        pass
+
 
     def _reconstruct_r_space_data(self)->None:
         """
         """
-        raise NotImplementedError
+        # raise NotImplementedError
+        pass
 
         
 
 
 
-#    @property
 
 if __name__ == "__main__":
 
