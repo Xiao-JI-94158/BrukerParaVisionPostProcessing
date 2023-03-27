@@ -26,7 +26,7 @@ class BrukerSpSpEpiExp(object):
         self.method_dict = self._read_param_dicts(self.data_paths_dict['method_path'])
         self.acqp_dict = self._read_param_dicts(self.data_paths_dict['acqp_path'])
         
-        self._data_dimensionality_dict={}
+        self._exp_data_dimensionality_dict = self._calc_exp_data_dimensionality()
         
         self.raw_fid = self._read_raw_fid()
         self.k_space_data = self._reconstruct_k_space_data()
@@ -128,12 +128,18 @@ class BrukerSpSpEpiExp(object):
         except ValueError:
             vallist = [float(x) for x in vallist]
 
-        # convert to numpy array
-        if len(vallist) > 1:
-            return np.reshape(np.array(vallist), arraysize)
-        # or to plain number
-        else:
-            return vallist[0]
+        """
+        # This block below is the original code from Ref: https://github.com/jdoepfert/brukerMRI
+        # For our purpose, we return all numerical types in format of numpy.ndarray, regardless of its length
+
+            # convert to numpy array
+            if len(vallist) > 1:
+                return np.reshape(np.array(vallist), arraysize)
+            # or to plain number
+            else:
+                return vallist[0]
+        """
+        return np.reshape(np.array(vallist), arraysize)
 
     def _parse_single_value(self, val):
         """
@@ -150,10 +156,24 @@ class BrukerSpSpEpiExp(object):
 
         return result    
 
-    
+    def _calc_exp_data_dimensionality(self)->dict:
+        dim_dict = {}
+        if (self.method_dict['VarExcPowerOnOff'] == 'On'):
+            dim_dict['dim_rf_flip_angle'] = (self.method_dict['NumVarPowerExpts'])
+            dim_dict['dim_image'] = np.shape(self.method_dict['PVM_Matrix'])
+            dim_dict['nbr_total_images'] = (self.method_dict['PVM_NRepetitions'])
+        elif (self.method_dict['VarExcPowerOnOff'] == 'Off'):
+            dim_dict['dim_rf_offset'] = np.shape(self.method_dict['CSOffsetList'])
+            dim_dict['dim_image'] = np.shape(self.method_dict['PVM_Matrix'])
+            dim_dict['nbr_total_images'] = (self.method_dict['PVM_NRepetitions'])
+        else:
+            raise ValueError
+        
+        return dim_dict
 
 
-    def _read_raw_fid(self)->None:
+
+    def _read_raw_fid(self)->np.ndarray:
         """
         """
         # raise NotImplementedError
