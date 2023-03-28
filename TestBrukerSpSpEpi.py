@@ -32,7 +32,7 @@ class TestBrukerSpSpEpi(unittest.TestCase):
 
         PVM_EncSteps1_array = np.linspace(start=-20, stop=59, num=80, endpoint=True, dtype=float)
         self.assertTrue(np.array_equal(self.spsp_epi.method_dict['PVM_EncSteps1'], PVM_EncSteps1_array, equal_nan=True))
-        self.assertAlmostEqual(self.spsp_epi.method_dict['PVM_EpiReadOddGrad'] , -0.0805918017183784)
+        self.assertAlmostEqual(self.spsp_epi.method_dict['PVM_EpiReadOddGrad'] , -0.0805918017183784) 
 
 
 if __name__ == '__main__':
