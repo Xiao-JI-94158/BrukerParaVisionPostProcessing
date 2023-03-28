@@ -34,6 +34,16 @@ class TestBrukerSpSpEpi(unittest.TestCase):
         self.assertTrue(np.array_equal(self.spsp_epi.method_dict['PVM_EncSteps1'], PVM_EncSteps1_array, equal_nan=True))
         self.assertAlmostEqual(self.spsp_epi.method_dict['PVM_EpiReadOddGrad'] , -0.0805918017183784) 
 
+    def test_calc_exp_data_dimensionality(self):
+        self.assertAlmostEqual(self.spsp_epi._exp_data_dimensionality_dict['dim_rf_offset'] , 1)
+        self.assertAlmostEqual(self.spsp_epi._exp_data_dimensionality_dict['dim_rf_flip_angle'] , 1)
+        self.assertAlmostEqual(self.spsp_epi._exp_data_dimensionality_dict['dim_k_raw_ro'] , 120)
+        self.assertAlmostEqual(self.spsp_epi._exp_data_dimensionality_dict['dim_k_raw_ph'] , 80)
+        self.assertAlmostEqual(self.spsp_epi._exp_data_dimensionality_dict['dim_r_image_ro'] , 120)
+        self.assertAlmostEqual(self.spsp_epi._exp_data_dimensionality_dict['dim_r_image_ph'] , 120)
+
+    def test_read_raw_fid(self):
+        pass
 
 if __name__ == '__main__':
     unittest.main()
