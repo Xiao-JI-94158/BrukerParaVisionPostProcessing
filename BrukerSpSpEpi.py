@@ -26,9 +26,12 @@ class BrukerSpSpEpiExp(object):
         self.method_dict = self._read_param_dicts(self.data_paths_dict['method_path'])
         self.acqp_dict = self._read_param_dicts(self.data_paths_dict['acqp_path'])
         
-        self._exp_data_dimensionality_dict = self._calc_exp_data_dimensionality()
+        self._exp_data_dim_dict = self._extract_exp_data_dims()
         
-        self.raw_fid = self._read_raw_fid()
+        self.fid = {}
+        self.fid['raw'] = self._read_raw_fid()
+        self.fid['deserialized'] = self._deserialize_raw_fid()
+
         self.k_space_data = self._reconstruct_k_space_data()
         self.r_space_data = self._reconstruct_r_space_data()
 
@@ -156,29 +159,34 @@ class BrukerSpSpEpiExp(object):
 
         return result    
 
-    def _calc_exp_data_dimensionality(self)->dict:
+    def _extract_exp_data_dims(self)->dict:
         dim_dict = {}
-        if (self.method_dict['VarExcPowerOnOff'] == 'On'):
-            dim_dict['dim_rf_flip_angle'] = (self.method_dict['NumVarPowerExpts'])
-            dim_dict['dim_image'] = np.shape(self.method_dict['PVM_Matrix'])
-            dim_dict['nbr_total_images'] = (self.method_dict['PVM_NRepetitions'])
-        elif (self.method_dict['VarExcPowerOnOff'] == 'Off'):
-            dim_dict['dim_rf_offset'] = np.shape(self.method_dict['CSOffsetList'])
-            dim_dict['dim_image'] = np.shape(self.method_dict['PVM_Matrix'])
-            dim_dict['nbr_total_images'] = (self.method_dict['PVM_NRepetitions'])
-        else:
-            raise ValueError
         
-        return dim_dict
+        dim_dict['dim_rf_flip_angle'] = self.method_dict['NumVarPowerExpts']
+        dim_dict['dim_rf_offset'] = np.shape(self.method_dict['CSOffsetList'])[0]
+        dim_dict['nbr_total_images'] = self.method_dict['PVM_NRepetitions']
+        dim_dict['dim_k_raw_ro'] = self.method_dict['PVM_EncMatrix'][0]
+        dim_dict['dim_k_raw_ph'] = self.method_dict['PVM_EncMatrix'][1]
+        dim_dict['dim_r_image_ro'] = self.method_dict['PVM_Matrix'][0]
+        dim_dict['dim_r_image_ph'] = self.method_dict['PVM_Matrix'][1]
 
+        return dim_dict
 
 
     def _read_raw_fid(self)->np.ndarray:
         """
         """
         # raise NotImplementedError
-        pass
+        if (self.acqp_dict['GO_raw_data_format'] == 'GO_32BIT_SGN_INT'):
+            binary_fid = np.fromfile(file=self.data_paths_dict['fid_path'], dtype='int32')
+        else:
+            raise TypeError()
+        
+        return binary_fid
     
+    def _deserialize_raw_fid(self)->np.ndarray:
+        return (self.fid['raw'][0::2, ...] + 1j * self.fid['raw'][1::2, ...])
+
     def _reconstruct_k_space_data(self)->None:
         """
         """
