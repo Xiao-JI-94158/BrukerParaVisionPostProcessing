@@ -55,3 +55,5 @@ docs/_build/
 
 # PyBuilder
 target/
+__pycache__/BrukerSpSpEpi.cpython-39.pyc
+__pycache__/BrukerSpSpEpi.cpython-310.pyc
