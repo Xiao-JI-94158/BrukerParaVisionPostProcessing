@@ -1,5 +1,6 @@
 # Official packages
 import os
+import copy
 
 # Third-party packages
 import numpy as np
@@ -180,25 +181,60 @@ class BrukerSpSpEpiExp(object):
         if (self.acqp_dict['GO_raw_data_format'] == 'GO_32BIT_SGN_INT'):
             binary_fid = np.fromfile(file=self.data_paths_dict['fid_path'], dtype='int32')
         else:
-            raise TypeError()
+            raise TypeError('Only 32bit signed interger is accepted')
         
         return binary_fid
     
     def _deserialize_raw_fid(self)->np.ndarray:
         return (self.fid['raw'][0::2, ...] + 1j * self.fid['raw'][1::2, ...])
 
-    def _reconstruct_k_space_data(self)->None:
+    def _reconstruct_k_space_data(self)->dict:
         """
         """
         # raise NotImplementedError
-        pass
+        _k_space_data = {}
+        _k_space_length = (self._exp_data_dim_dict['dim_k_raw_ph'] * self._exp_data_dim_dict['dim_k_raw_ro'])
+        if (np.shape(self.fid['deserialized'])[0] == 2 * _k_space_length):
+            _k_space_2d = np.reshape(self.fid['deserialized'], (self._exp_data_dim_dict['dim_k_raw_ph'], -1))
+            _k_space_2d = self._zerofill_fid_2d(_k_space_2d)
+            _k_space_data["deg0"], _k_space_data["deg90"] = self._split_fid_2d(_k_space_2d)
+            _k_space_data["deg0"] = self._align_echo_center(_k_space_data["deg0"])
+            _k_space_data["deg90"] = self._align_echo_center(_k_space_data["deg90"])
+        elif (np.shape(self.fid['deserialized'])[0] == _k_space_length):
+            _k_space_2d = np.reshape(self.fid['deserialized'], (self._exp_data_dim_dict['dim_k_raw_ph'], self._exp_data_dim_dict['dim_k_raw_ro']))
+            _k_space_data["deg0"] = self._align_echo_center(_k_space_2d)
+        else:
+            raise ValueError("Size of Raw FID is not equal to the size of partial-phased k-space, nor the double of it")
+        
+        return _k_space_data
+        
 
+    def _zerofill_fid_2d(self, fid_2d):
+        nbr_zerofill_lines = self._exp_data_dim_dict['dim_r_image_ph'] - self._exp_data_dim_dict['dim_k_raw_ph']
+        zerofilled_fid_2d = np.pad(fid_2d, ((nbr_zerofill_lines, 0),(0, 0)), 'constant', constant_values=(0))
+        return zerofilled_fid_2d
 
-    def _reconstruct_r_space_data(self)->None:
+    def _split_fid_2d(self, fid_2d):
+        fid_left  = fid_2d[...,:self._exp_data_dim_dict['dim_k_raw_ro']:]
+        fid_right = fid_2d[...,self._exp_data_dim_dict['dim_k_raw_ro']::]
+        return fid_left, fid_right
+
+    def _align_echo_center(self, fid_2d):
+        aligned_fid_2d = copy.deepcopy(fid_2d)
+        for idx, line in enumerate(fid_2d):
+            shift = 60 - np.argmax(np.abs(line))
+            aligned_fid_2d[idx] = np.roll(line, shift)
+        return aligned_fid_2d
+
+    def _reconstruct_r_space_data(self)->dict:
         """
         """
-        # raise NotImplementedError
-        pass
+        _r_space_data = {}
+        
+        _r_space_data["deg0"]  = np.fft.fftshift(np.fft.fft2(self.k_space_data["deg0"]))
+        _r_space_data["deg90"] = np.fft.fftshift(np.fft.fft2(self.k_space_data["deg90"]))
+        
+        return _r_space_data
 
         
 

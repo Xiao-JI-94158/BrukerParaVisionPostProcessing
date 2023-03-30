@@ -4,6 +4,7 @@ import unittest
 
 # Third-party packages
 import numpy as np
+import matplotlib.pyplot as plt
 
 # In-house packages
 from BrukerSpSpEpi import BrukerSpSpEpiExp
@@ -43,7 +44,9 @@ class TestBrukerSpSpEpi(unittest.TestCase):
         self.assertAlmostEqual(self.spsp_epi._exp_data_dim_dict['dim_r_image_ph'] , 120)
 
     def test_read_raw_fid(self):
-        pass
+        plt.plot(np.real(self.spsp_epi.fid['deserialized']))
+        plt.plot(np.imag(self.spsp_epi.fid['deserialized']))
+        
 
 if __name__ == '__main__':
     unittest.main()
