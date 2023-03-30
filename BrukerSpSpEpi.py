@@ -193,14 +193,14 @@ class BrukerSpSpEpiExp(object):
         """
         # raise NotImplementedError
         _k_space_data = {}
-        _k_space_length = (self._exp_data_dim_dict['dim_k_raw_ph'] * self._exp_data_dim_dict['dim_k_raw_ro'])
-        if (np.shape(self.fid['deserialized'])[0] == 2 * _k_space_length):
+        _k_space_encoding_length = (self._exp_data_dim_dict['dim_k_raw_ph'] * self._exp_data_dim_dict['dim_k_raw_ro'])
+        if (np.shape(self.fid['deserialized'])[0] == 2 * _k_space_encoding_length):
             _k_space_2d = np.reshape(self.fid['deserialized'], (self._exp_data_dim_dict['dim_k_raw_ph'], -1))
             _k_space_2d = self._zerofill_fid_2d(_k_space_2d)
             _k_space_data["deg0"], _k_space_data["deg90"] = self._split_fid_2d(_k_space_2d)
             _k_space_data["deg0"] = self._align_echo_center(_k_space_data["deg0"])
             _k_space_data["deg90"] = self._align_echo_center(_k_space_data["deg90"])
-        elif (np.shape(self.fid['deserialized'])[0] == _k_space_length):
+        elif (np.shape(self.fid['deserialized'])[0] == _k_space_encoding_length):
             _k_space_2d = np.reshape(self.fid['deserialized'], (self._exp_data_dim_dict['dim_k_raw_ph'], self._exp_data_dim_dict['dim_k_raw_ro']))
             _k_space_data["deg0"] = self._align_echo_center(_k_space_2d)
         else:
