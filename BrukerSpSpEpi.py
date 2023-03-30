@@ -33,8 +33,10 @@ class BrukerSpSpEpiExp(object):
         self.fid['raw'] = self._read_raw_fid()
         self.fid['deserialized'] = self._deserialize_raw_fid()
 
-        self.k_space_data = self._reconstruct_k_space_data()
+        self.k_space_data = self._generate_k_space_data()
         self.r_space_data = self._reconstruct_r_space_data()
+
+        self.magnitude_proj = self._calc_magnitude_proj()
 
         
     
@@ -188,21 +190,35 @@ class BrukerSpSpEpiExp(object):
     def _deserialize_raw_fid(self)->np.ndarray:
         return (self.fid['raw'][0::2, ...] + 1j * self.fid['raw'][1::2, ...])
 
-    def _reconstruct_k_space_data(self)->dict:
+    def _generate_k_space_data(self)->dict:
         """
+        When the length of FID doubles the length of raw k-space encoding,
+            We assume this is <Double Sampling> type EPI readout.
+            Under this assumption:
+                No even-line-mirroring is performed, since the two samplings comes from Pos. and Neg lobe of EPI readout respectively.
+                Raw k-space encoding is splited into two sub-k-spaces, the Pos and the Neg, for reconstruction, which has exactly opposite phases
+                Echo-centers of readout lines in the two sub-k-spaces are aligned
+        When the length of FID equals the length of raw k-space encoding,
+            It is conventional EPI readout.
+            Under this assumption:
+                Even-line-mirroring is performed
+                Align echo-centers of each line of readout
         """
-        # raise NotImplementedError
+            
         _k_space_data = {}
         _k_space_encoding_length = (self._exp_data_dim_dict['dim_k_raw_ph'] * self._exp_data_dim_dict['dim_k_raw_ro'])
         if (np.shape(self.fid['deserialized'])[0] == 2 * _k_space_encoding_length):
             _k_space_2d = np.reshape(self.fid['deserialized'], (self._exp_data_dim_dict['dim_k_raw_ph'], -1))
+            _k_space_data["Raw"] = _k_space_2d
             _k_space_2d = self._zerofill_fid_2d(_k_space_2d)
-            _k_space_data["deg0"], _k_space_data["deg90"] = self._split_fid_2d(_k_space_2d)
-            _k_space_data["deg0"] = self._align_echo_center(_k_space_data["deg0"])
-            _k_space_data["deg90"] = self._align_echo_center(_k_space_data["deg90"])
+            _k_space_data["Pos"], _k_space_data["Neg"] = self._split_fid_2d(_k_space_2d)
+            _k_space_data["Pos"] = self._align_echo_center(_k_space_data["Pos"])
+            _k_space_data["Neg"] = self._align_echo_center(_k_space_data["Neg"])
+            _k_space_data["Neg"] = np.fliplr(_k_space_data["Neg"])
         elif (np.shape(self.fid['deserialized'])[0] == _k_space_encoding_length):
             _k_space_2d = np.reshape(self.fid['deserialized'], (self._exp_data_dim_dict['dim_k_raw_ph'], self._exp_data_dim_dict['dim_k_raw_ro']))
-            _k_space_data["deg0"] = self._align_echo_center(_k_space_2d)
+            _k_space_data["Raw"] = _k_space_2d
+            _k_space_data["Pos"] = self._align_echo_center(_k_space_2d)
         else:
             raise ValueError("Size of Raw FID is not equal to the size of partial-phased k-space, nor the double of it")
         
@@ -220,23 +236,44 @@ class BrukerSpSpEpiExp(object):
         return fid_left, fid_right
 
     def _align_echo_center(self, fid_2d):
-        aligned_fid_2d = copy.deepcopy(fid_2d)
+        
         for idx, line in enumerate(fid_2d):
             shift = 60 - np.argmax(np.abs(line))
-            aligned_fid_2d[idx] = np.roll(line, shift)
-        return aligned_fid_2d
+            fid_2d[idx] = np.roll(line, shift)
+        return fid_2d
 
     def _reconstruct_r_space_data(self)->dict:
         """
+        When the k_space_data has both Pos and Neg part
+            We assume this is <Double Sampling> type EPI readout.
+            Under this assumption:
+                FT for two sub-r-space image, the Pos and the Neg.
+                Yield the magnitude result from the addition of both magnitude images from the Pos and the Neg.
+        When the k_space_data has only Pos part
+            It is conventional EPI readout.
+            Under this assumption:
+                FT for r-space image
+                Yield the magnitude result
         """
         _r_space_data = {}
         
-        _r_space_data["deg0"]  = np.fft.fftshift(np.fft.fft2(self.k_space_data["deg0"]))
-        _r_space_data["deg90"] = np.fft.fftshift(np.fft.fft2(self.k_space_data["deg90"]))
+        _r_space_data["Pos"] = np.fft.fftshift(np.fft.fft2(self.k_space_data["Pos"]))
+        if ('Neg' in self.k_space_data.keys()):
+            _r_space_data["Neg"] = np.fft.fftshift(np.fft.fft2(self.k_space_data["Neg"]))
+
+        if ('Neg' in self.k_space_data.keys()):
+            _r_space_data["Mag"] = np.abs(_r_space_data["Pos"]) + np.abs(_r_space_data["Neg"])
+        else:
+            _r_space_data["Mag"] = np.abs(_r_space_data["Pos"])
         
         return _r_space_data
 
-        
+    def _calc_magnitude_proj(self)->dict:
+        magnitude_proj = {}
+        magnitude_proj['ro'] = np.sum(self.r_space_data['Mag'], axis=0)
+        magnitude_proj['ph'] = np.sum(self.r_space_data['Mag'], axis=1)
+        return magnitude_proj
+
 
 
 
