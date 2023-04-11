@@ -10,33 +10,12 @@ import pandas as pd
 
 # In-house packages
 
-"""
-class SpSpEpiTransientSpace(object):
-    def __init__(self, **kwargs):
-        
-        self._nbr_metabolites       = kwargs.get('nbr_metabolites', None)
-        self._metabolite_offset_list= kwargs.get('metabolite_offset_list', None)
-        self._nbr_time_points       = kwargs.get('nbr_time_points', None)
-        self._dim_k_raw_ro          = kwargs.get('dim_k_raw_ro', None)
-        self._dim_k_raw_ph          = kwargs.get('dim_k_raw_ph', None)
-        self._dim_r_image_ro        = kwargs.get('dim_r_image_ro', None) 
-        self._dim_r_image_ph        = kwargs.get('dim_r_image_ph', None)
-        self._fov_ro                = kwargs.get('fov_ro', None)        
-        self._fov_ph                = kwargs.get('fov_ph', None)        
-        self.transients             = None
-"""
 
 TRANSIENT_ENTRIES = {
-    "rf_offset"     : "float",
     "time_pts"      : "int",
-    "k_ro_pts"      : "int",
-    "k_ph_pts"      : "int",
+    "raw_fid"       : "object",
     "k_space_pos"   : "object",
     "k_space_neg"   : "object",
-    "r_ro_pts"      : "int",
-    "r_ph_pts"      : "int",
-    "r_ro_fov_mm"   : "float",
-    "r_ph_fov_mm"   : "float",
     "r_space_pos"   : "object",
     "r_space_neg"   : "object",
     "r_space_abs"   : "object"
@@ -51,18 +30,19 @@ class BrukerSpSpEpiExp(object):
         Basic Class that that read, stores, and (post-)processes EPI data acquired from Spectral-Spatial Selective Excitation (SpSp_EPI)
     """
     
-    def __init__(self, exp_data_path:str, metabolite_list:List[str] = DEFAULT_METABOLITES ) -> None:
+    def __init__(self, exp_data_path:str, metabolite_list:List[str] = DEFAULT_METABOLITES, does_zerofilling=False, does_align_echo_center=False ) -> None:
         """
         """
         self.metabolite_list = metabolite_list
         self.data_paths_dict = self._update_data_paths(exp_data_path)             
-        self.transient_space = self._generate_transient_space()  
+        
 
         self.param_dict = (self._read_param_dicts(self.data_paths_dict['method']) | self._read_param_dicts(self.data_paths_dict['acqp'])) 
 
         self._validate() 
-        
-        self.data = self.reconstruct_transient_space()
+
+        self.transient_space = self._generate_transient_space()  
+        self.data = self.reconstruct_transient_space( does_zerofilling=False, does_align_echo_center=False )
 
 
 
@@ -200,61 +180,103 @@ class BrukerSpSpEpiExp(object):
 
     def _validate(self):
         _nbr_metabolite = len(self.metabolite_list)
-        _nbr_cs_offsite = self.param_dict['NumChemicalShifts']
-        if ( _nbr_metabolite != _nbr_cs_offsite ):
-            raise ValueError( f'Number of metabolite names ({_nbr_metabolite}) provided by user does not match the number of chemical shift offsets ({_nbr_cs_offsite}) in the raw data.' )
+        _nbr_cs_offset = self.param_dict['NumChemicalShifts']
+        if ( _nbr_metabolite != _nbr_cs_offset ):
+            raise ValueError( f'Number of metabolite names ({_nbr_metabolite}) provided by user does not match the number of chemical shift offsets ({_nbr_cs_offset}) in the raw data.' )
     
-    def reconstruct_transient_space(self):
-        fid = self._read_raw_fid()
-        fid = self._deserialize_raw_fid(fid)
-        fid = np.array_split(fid, self.param_dict['PVM_NRepetitions'])
-        fid = np.reshape(fid, newshape=(  , -1))
+    def _reconstruct_transient_space(self):
+        
+        _nbr_metabolite = self.param_dict["NumChemicalShifts"]
+        _nbr_repetition = self.param_dict["NR"]
+        _nbr_time_pts = int(np.ceil( _nbr_repetition / float(_nbr_metabolite)))
+        _TR_sec = self.param_dict['ACQ_repetition_time'] / 1000
+        time_pts = np.tile(_TR_sec, reps=_nbr_repetition) + np.tile(self.param_dict['Vd1List'], reps=_nbr_time_pts) # time-interval list
+        time_pts = np.concatenate((np.array([0]), time_pts[:-1:])) # ACQ starts at time=0!
+        time_pts = np.cumsum(time_pts) # time of transient excution is cumulative sum of time-intervals between consecutive transients
+                
+        raw_fids = self._read_raw_fid()
+        raw_fids = self._deserialize_raw_fid(raw_fids)
+        raw_fids = np.array_split(raw_fids, _nbr_repetition)
+        #fid = fid.reshape( _nbr_time_pts, _nbr_metabolite, -1)
+        #fid = np.swapaxes(fid, axis1=0, axis2=1)
+        #fid = np.squeeze(fid)
 
-        return fid
+        pos_k_spaces, neg_k_spaces = zip(*map(self._construct_k_space(), raw_fids))
+
+        def ft2d(x): return np.fft.fftshift(np.fft.fft2(x))
+
+        pos_r_iamges = [ft2d(k_space_pos) for k_space_pos in pos_k_spaces]
+        neg_r_iamges = [ft2d(k_space_neg) for k_space_neg in neg_k_spaces]
+
+        transient_space = pd.DataFrame( 
+                                        data = [time_pts, raw_fids],
+                                        {col_name: pd.Series(dtype=col_type) for col_name, col_type in TRANSIENT_ENTRIES.items()}
+                                    )
+        return 
+
 
     def _read_raw_fid(self) -> np.ndarray:
         _raw_fid_dtype = self.param_dict['GO_raw_data_format']
         if (_raw_fid_dtype == 'GO_32BIT_SGN_INT') :
             fid = np.fromfile(file=self.data_paths_dict['fid'], dtype='int32')
+
         else:
             raise TypeError( f'Raw FID data in Unknown Datatype ({_raw_fid_dtype})' )
+        
+        return fid
     
     def _deserialize_raw_fid(self, fid) -> np.ndarray:
         return (fid[0::2, ...] + 1j * fid[1::2, ...])
 
-    def _generate_k_space_data(self)->dict:
-        """
-        When the length of FID doubles the length of raw k-space encoding,
-            We assume this is <Double Sampling> type EPI readout.
-            Under this assumption:
-                No even-line-mirroring is performed, since the two samplings comes from Pos. and Neg lobe of EPI readout respectively.
-                Raw k-space encoding is splited into two sub-k-spaces, the Pos and the Neg, for reconstruction, which has exactly opposite phases
-                Echo-centers of readout lines in the two sub-k-spaces are aligned
-        When the length of FID equals the length of raw k-space encoding,
-            It is conventional EPI readout.
-            Under this assumption:
-                Even-line-mirroring is performed
-                Align echo-centers of each line of readout
-        """
+    def _construct_k_space(self, fid, does_zerofilling=False, does_align_echo_center=False) -> List[np.ndarray, np.ndarray]:
+        dim_k_raw_ro, dim_k_raw_ph = self.param_dict['PVM_EncMatrix']
+        dim_r_img_ro, dim_r_img_ph = self.param_dict['PVM_Matrix']
+        k_space_encoding_length = (dim_k_raw_ph * dim_k_raw_ro)
+
+        if (len(fid) == 2 * k_space_encoding_length):
+            """
+            When the length of FID doubles the length of raw k-space encoding,
+                We assume this is <Double Sampling> type EPI readout.
+                Under this assumption:
+                    No even-line-mirroring is performed, since the two samplings comes from Pos. and Neg lobe of EPI readout respectively.
+                    Raw k-space encoding is splited into two sub-k-spaces, the Pos and the Neg, for reconstruction, which has exactly opposite phases
+                    Echo-centers of readout lines in the two sub-k-spaces are aligned
+            """            
+            _fid_2d = np.reshape(fid, (dim_k_raw_ph, -1))
             
-        _k_space_data = {}
-        _k_space_encoding_length = (self._exp_data_dim_dict['dim_k_raw_ph'] * self._exp_data_dim_dict['dim_k_raw_ro'])
-        if (np.shape(self.fid['deserialized'])[0] == 2 * _k_space_encoding_length):
-            _k_space_2d = np.reshape(self.fid['deserialized'], (self._exp_data_dim_dict['dim_k_raw_ph'], -1))
-            _k_space_data["Raw"] = _k_space_2d
-            _k_space_2d = self._zerofill_fid_2d(_k_space_2d)
-            _k_space_data["Pos"], _k_space_data["Neg"] = self._split_fid_2d(_k_space_2d)
-            _k_space_data["Pos"] = self._align_echo_center(_k_space_data["Pos"])
-            _k_space_data["Neg"] = self._align_echo_center(_k_space_data["Neg"])
-            _k_space_data["Neg"] = np.fliplr(_k_space_data["Neg"])
-        elif (np.shape(self.fid['deserialized'])[0] == _k_space_encoding_length):
-            _k_space_2d = np.reshape(self.fid['deserialized'], (self._exp_data_dim_dict['dim_k_raw_ph'], self._exp_data_dim_dict['dim_k_raw_ro']))
-            _k_space_data["Raw"] = _k_space_2d
-            _k_space_data["Pos"] = self._align_echo_center(_k_space_2d)
+            _k_space_pos, _k_space_neg = self._split_fid_2d(_fid_2d)
+
+            if does_zerofilling:
+                _k_space_pos = self._zerofill_kspace(_k_space_pos)
+                _k_space_neg = self._zerofill_kspace(_k_space_neg)
+            
+            if does_align_echo_center:
+                _k_space_pos = self._align_echo_center(_k_space_pos)
+
+                _k_space_neg = self._align_echo_center(_k_space_neg)
+                _k_space_neg = np.fliplr(_k_space_neg)
+
+        elif (len(fid) == k_space_encoding_length):
+            """
+            When the length of FID equals the length of raw k-space encoding,
+                It is conventional EPI readout.
+                Under this assumption:
+                    Even-line-mirroring is performed
+                    Align echo-centers of each line of readout
+            """
+            _k_space_neg = np.array([])
+            _k_space_pos = np.reshape(fid, (dim_k_raw_ph, dim_k_raw_ro))
+            _k_space_pos[1::2, ::] = _k_space_pos[1::2, ::-1]
+            if does_zerofilling:
+                _k_space_pos = self._zerofill_kspace(_k_space_pos)
+                _k_space_neg = self._zerofill_kspace(_k_space_neg)
+            
+            if does_align_echo_center:
+                _k_space_pos = self._align_echo_center(_k_space_pos)
         else:
-            raise ValueError(f"Size of Raw FID ({np.shape(self.fid['deserialized'])}) is not equal to the size of partial-phased k-space ({_k_space_encoding_length}), nor the double of it")
+            raise ValueError(f"Size of Raw FID ({np.shape(self.fid['deserialized'])}) is not equal to the size of partial-phased k-space ({k_space_encoding_length}), nor the double of it")
         
-        return _k_space_data
+        return [_k_space_pos, _k_space_neg]
         
 
     def _zerofill_fid_2d(self, fid_2d):
@@ -274,7 +296,7 @@ class BrukerSpSpEpiExp(object):
             fid_2d[idx] = np.roll(line, shift)
         return fid_2d
 
-    def _reconstruct_r_space_data(self)->dict:
+    def _reconstruct_r_image(self)->dict:
         """
         When the k_space_data has both Pos and Neg part
             We assume this is <Double Sampling> type EPI readout.
