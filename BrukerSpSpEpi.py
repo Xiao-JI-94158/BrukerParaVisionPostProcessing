@@ -2,64 +2,92 @@
 import os
 import copy
 
+from typing import List
+
 # Third-party packages
 import numpy as np
+import pandas as pd
 
 # In-house packages
 
+"""
+class SpSpEpiTransientSpace(object):
+    def __init__(self, **kwargs):
+        
+        self._nbr_metabolites       = kwargs.get('nbr_metabolites', None)
+        self._metabolite_offset_list= kwargs.get('metabolite_offset_list', None)
+        self._nbr_time_points       = kwargs.get('nbr_time_points', None)
+        self._dim_k_raw_ro          = kwargs.get('dim_k_raw_ro', None)
+        self._dim_k_raw_ph          = kwargs.get('dim_k_raw_ph', None)
+        self._dim_r_image_ro        = kwargs.get('dim_r_image_ro', None) 
+        self._dim_r_image_ph        = kwargs.get('dim_r_image_ph', None)
+        self._fov_ro                = kwargs.get('fov_ro', None)        
+        self._fov_ph                = kwargs.get('fov_ph', None)        
+        self.transients             = None
+"""
 
+TRANSIENT_ENTRIES = {
+    "rf_offset"     : "float",
+    "time_pts"      : "int",
+    "k_ro_pts"      : "int",
+    "k_ph_pts"      : "int",
+    "k_space_pos"   : "object",
+    "k_space_neg"   : "object",
+    "r_ro_pts"      : "int",
+    "r_ph_pts"      : "int",
+    "r_ro_fov_mm"   : "float",
+    "r_ph_fov_mm"   : "float",
+    "r_space_pos"   : "object",
+    "r_space_neg"   : "object",
+    "r_space_abs"   : "object"
+}
 
+DEFAULT_METABOLITES = ['Urea','Pyruvate','Lactate']
+
+TEST_CHEMICAL = ['Urea']
 
 class BrukerSpSpEpiExp(object):
     """
-        Basic Class that that read, stores, and (post)-processes EPI data acquired from Spectral-Spatial Selective Excitation (SpSp_EPI)
+        Basic Class that that read, stores, and (post-)processes EPI data acquired from Spectral-Spatial Selective Excitation (SpSp_EPI)
     """
     
-    def __init__(self, dataset_path:str, exp_nbr:int) -> None:
+    def __init__(self, exp_data_path:str, metabolite_list:List[str] = DEFAULT_METABOLITES ) -> None:
         """
         """
-        
-        self.exp_path = os.path.join(dataset_path, str(exp_nbr))
-        
-        self.data_paths_dict = self._update_data_paths()
-        
-        
-        self.method_dict = self._read_param_dicts(self.data_paths_dict['method_path'])
-        self.acqp_dict = self._read_param_dicts(self.data_paths_dict['acqp_path'])
-        
-        self._exp_data_dim_dict = self._extract_exp_data_dims()
-        
-        self.fid = {}
-        self.fid['raw'] = self._read_raw_fid()
-        self.fid['deserialized'] = self._deserialize_raw_fid()
+        self.metabolite_list = metabolite_list
+        self.data_paths_dict = self._update_data_paths(exp_data_path)             
+        self.transient_space = self._generate_transient_space()  
 
-        self.k_space_data = self._generate_k_space_data()
-        self.r_space_data = self._reconstruct_r_space_data()
+        self.param_dict = (self._read_param_dicts(self.data_paths_dict['method']) | self._read_param_dicts(self.data_paths_dict['acqp'])) 
 
-        self.magnitude_proj = self._calc_magnitude_proj()
-
+        self._validate() 
         
-    
-    def _update_data_paths(self)->None:
+        self.data = self.reconstruct_transient_space()
+
+
+
+
+
+    def _update_data_paths(self, exp_data_path)->None:
         data_paths_dict = {}
         
-        if (not (os.path.isdir(self.exp_path))):
+        if (not (os.path.isdir(exp_data_path))):
             raise NotADirectoryError("Given directory of Experiment does not exist")
 
-        fid_path =  os.path.join(self.exp_path, "fid")
+        fid_path =  os.path.join(exp_data_path, "fid")
         if (not (os.path.isfile(fid_path))):
             raise FileNotFoundError("Cannot find FID file in the given directory of Experiment")
-        data_paths_dict['fid_path'] = fid_path
+        data_paths_dict['fid'] = fid_path
 
-        method_path = os.path.join(self.exp_path, "method")
+        method_path = os.path.join(exp_data_path, "method")
         if (not (os.path.isfile(method_path))):
             raise FileNotFoundError("Cannot find METHOD file in the given directory of Experiment")
-        data_paths_dict['method_path'] = method_path
+        data_paths_dict['method'] = method_path
 
-        acqp_path = os.path.join(self.exp_path, "acqp")
+        acqp_path = os.path.join(exp_data_path, "acqp")
         if (not (os.path.isfile(acqp_path))):
             raise FileNotFoundError("Cannot find ACQP file in the given directory of Experiment")
-        data_paths_dict['acqp_path'] = acqp_path
+        data_paths_dict['acqp'] = acqp_path
         return data_paths_dict
        
 
@@ -162,33 +190,37 @@ class BrukerSpSpEpiExp(object):
 
         return result    
 
-    def _extract_exp_data_dims(self)->dict:
-        dim_dict = {}
-        
-        dim_dict['dim_rf_flip_angle'] = self.method_dict['NumVarPowerExpts']
-        dim_dict['dim_rf_offset'] = np.shape(self.method_dict['CSOffsetList'])[0]
-        dim_dict['nbr_total_images'] = self.method_dict['PVM_NRepetitions']
-        dim_dict['dim_k_raw_ro'] = self.method_dict['PVM_EncMatrix'][0]
-        dim_dict['dim_k_raw_ph'] = self.method_dict['PVM_EncMatrix'][1]
-        dim_dict['dim_r_image_ro'] = self.method_dict['PVM_Matrix'][0]
-        dim_dict['dim_r_image_ph'] = self.method_dict['PVM_Matrix'][1]
+    def _generate_transient_space(self) -> dict[str, pd.DataFrame]:
+        transient_space = {}
+        for metabolite in self.metabolite_list:
+            transient_space[metabolite] = pd.DataFrame( 
+                                                {col_name: pd.Series(dtype=col_type) for col_name, col_type in TRANSIENT_ENTRIES.items()}
+                                            )
+        return transient_space
 
-        return dim_dict
-
-
-    def _read_raw_fid(self)->np.ndarray:
-        """
-        """
-        # raise NotImplementedError
-        if (self.acqp_dict['GO_raw_data_format'] == 'GO_32BIT_SGN_INT'):
-            binary_fid = np.fromfile(file=self.data_paths_dict['fid_path'], dtype='int32')
-        else:
-            raise TypeError('Only 32bit signed interger is accepted')
-        
-        return binary_fid
+    def _validate(self):
+        _nbr_metabolite = len(self.metabolite_list)
+        _nbr_cs_offsite = self.param_dict['NumChemicalShifts']
+        if ( _nbr_metabolite != _nbr_cs_offsite ):
+            raise ValueError( f'Number of metabolite names ({_nbr_metabolite}) provided by user does not match the number of chemical shift offsets ({_nbr_cs_offsite}) in the raw data.' )
     
-    def _deserialize_raw_fid(self)->np.ndarray:
-        return (self.fid['raw'][0::2, ...] + 1j * self.fid['raw'][1::2, ...])
+    def reconstruct_transient_space(self):
+        fid = self._read_raw_fid()
+        fid = self._deserialize_raw_fid(fid)
+        fid = np.array_split(fid, self.param_dict['PVM_NRepetitions'])
+        fid = np.reshape(fid, newshape=(  , -1))
+
+        return fid
+
+    def _read_raw_fid(self) -> np.ndarray:
+        _raw_fid_dtype = self.param_dict['GO_raw_data_format']
+        if (_raw_fid_dtype == 'GO_32BIT_SGN_INT') :
+            fid = np.fromfile(file=self.data_paths_dict['fid'], dtype='int32')
+        else:
+            raise TypeError( f'Raw FID data in Unknown Datatype ({_raw_fid_dtype})' )
+    
+    def _deserialize_raw_fid(self, fid) -> np.ndarray:
+        return (fid[0::2, ...] + 1j * fid[1::2, ...])
 
     def _generate_k_space_data(self)->dict:
         """
@@ -220,7 +252,7 @@ class BrukerSpSpEpiExp(object):
             _k_space_data["Raw"] = _k_space_2d
             _k_space_data["Pos"] = self._align_echo_center(_k_space_2d)
         else:
-            raise ValueError("Size of Raw FID is not equal to the size of partial-phased k-space, nor the double of it")
+            raise ValueError(f"Size of Raw FID ({np.shape(self.fid['deserialized'])}) is not equal to the size of partial-phased k-space ({_k_space_encoding_length}), nor the double of it")
         
         return _k_space_data
         
@@ -273,6 +305,7 @@ class BrukerSpSpEpiExp(object):
         magnitude_proj['ro'] = np.sum(self.r_space_data['Mag'], axis=0)
         magnitude_proj['ph'] = np.sum(self.r_space_data['Mag'], axis=1)
         return magnitude_proj
+    
 
 
 
