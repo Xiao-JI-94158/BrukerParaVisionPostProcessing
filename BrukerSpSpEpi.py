@@ -10,15 +10,19 @@ import pandas as pd
 
 # In-house packages
 
+RECONSTRUCTION_PARAMETERS = {
+    'does_zerofilling'          = False,
+    'does aligning_echo_center' = False
+}
 
 TRANSIENT_ENTRIES = {
-    "time_pts"      : "int",
-    "raw_fid"       : "object",
-    "k_space_pos"   : "object",
-    "k_space_neg"   : "object",
-    "r_space_pos"   : "object",
-    "r_space_neg"   : "object",
-    "r_space_abs"   : "object"
+    "time_pts"       : None,
+    "raw_fids"       : None,
+    "k_spaces_pos"   : None,
+    "k_spaces_neg"   : None,
+    "r_images_pos"   : None,
+    "r_images_neg"   : None,
+    "r_images_abs"   : None
 }
 
 DEFAULT_METABOLITES = ['Urea','Pyruvate','Lactate']
@@ -30,21 +34,26 @@ class BrukerSpSpEpiExp(object):
         Basic Class that that read, stores, and (post-)processes EPI data acquired from Spectral-Spatial Selective Excitation (SpSp_EPI)
     """
     
-    def __init__(self, exp_data_path:str, metabolite_list:List[str] = DEFAULT_METABOLITES, does_zerofilling=False, does_align_echo_center=False ) -> None:
+    def __init__(self, exp_data_path:str, metabolite_list:List[str] = DEFAULT_METABOLITES, **kwargs) -> None:
         """
         """
         self.metabolite_list = metabolite_list
         self.data_paths_dict = self._update_data_paths(exp_data_path)             
         
+        self.recon_params    = _retrieve_recon_params(kwargs)
 
-        self.param_dict = (self._read_param_dicts(self.data_paths_dict['method']) | self._read_param_dicts(self.data_paths_dict['acqp'])) 
-
+        self.param_dict      = (self._read_param_dicts(self.data_paths_dict['method']) | self._read_param_dicts(self.data_paths_dict['acqp'])) 
+        self.transient_space = self._generate_transient_space()  
         self._validate() 
 
-        self.transient_space = self._generate_transient_space()  
+        
         self.data = self.reconstruct_transient_space( does_zerofilling=False, does_align_echo_center=False )
 
 
+    def _retrieve_recon_params(self, kwargs):
+        recon_params = copy.deepcopy(RECONSTRUCTION_PARAMETERS)
+        recon_params.update((k, kwargs[k]) for k in (recon_params.keys() & kwargs.keys()) )
+        return recon_params
 
 
 
@@ -173,9 +182,7 @@ class BrukerSpSpEpiExp(object):
     def _generate_transient_space(self) -> dict[str, pd.DataFrame]:
         transient_space = {}
         for metabolite in self.metabolite_list:
-            transient_space[metabolite] = pd.DataFrame( 
-                                                {col_name: pd.Series(dtype=col_type) for col_name, col_type in TRANSIENT_ENTRIES.items()}
-                                            )
+            transient_space[metabolite] = copy.deepcopy(TRANSIENT_ENTRIES)
         return transient_space
 
     def _validate(self):
@@ -208,11 +215,8 @@ class BrukerSpSpEpiExp(object):
         pos_r_iamges = [ft2d(k_space_pos) for k_space_pos in pos_k_spaces]
         neg_r_iamges = [ft2d(k_space_neg) for k_space_neg in neg_k_spaces]
 
-        transient_space = pd.DataFrame( 
-                                        data = [time_pts, raw_fids],
-                                        {col_name: pd.Series(dtype=col_type) for col_name, col_type in TRANSIENT_ENTRIES.items()}
-                                    )
-        return 
+        
+        return NotImplemented
 
 
     def _read_raw_fid(self) -> np.ndarray:
