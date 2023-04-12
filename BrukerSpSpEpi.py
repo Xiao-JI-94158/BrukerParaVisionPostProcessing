@@ -46,6 +46,9 @@ class BrukerSpSpEpiExp(object):
         self.param_dict      = (self._read_param_dicts(self.data_paths_dict['method']) | self._read_param_dicts(self.data_paths_dict['acqp'])) 
         self.transient_space = self._generate_transient_space()  
         self._validate() 
+        self._load_fid()
+        self._construct_k_space()
+        self._reconstruct_r_image()
 
         
         
@@ -219,6 +222,16 @@ class BrukerSpSpEpiExp(object):
         
         return NotImplemented
 
+    def _load_fid(self):
+        fid = self.+_read_raw_fid()
+        fid = self._deserialize_raw_fid(fid)
+
+        _nbr_repetition = self.param_dict['NR']
+        fid = np.array_split(fid, )
+
+
+        return NotImplemented
+    
 
     def _read_raw_fid(self) -> np.ndarray:
         _raw_fid_dtype = self.param_dict['GO_raw_data_format']
