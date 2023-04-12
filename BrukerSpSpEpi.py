@@ -11,11 +11,12 @@ import pandas as pd
 # In-house packages
 
 RECONSTRUCTION_PARAMETERS = {
-    'does_zerofilling'          = False,
-    'does aligning_echo_center' = False
+    'does_zerofilling'          : False,
+    'does aligning_echo_center' : False
 }
 
 TRANSIENT_ENTRIES = {
+    "nbr_acquisition": None,
     "time_pts"       : None,
     "raw_fids"       : None,
     "k_spaces_pos"   : None,
@@ -40,14 +41,14 @@ class BrukerSpSpEpiExp(object):
         self.metabolite_list = metabolite_list
         self.data_paths_dict = self._update_data_paths(exp_data_path)             
         
-        self.recon_params    = _retrieve_recon_params(kwargs)
+        self.recon_params    = self._retrieve_recon_params(kwargs)
 
         self.param_dict      = (self._read_param_dicts(self.data_paths_dict['method']) | self._read_param_dicts(self.data_paths_dict['acqp'])) 
         self.transient_space = self._generate_transient_space()  
         self._validate() 
 
         
-        self.data = self.reconstruct_transient_space( does_zerofilling=False, does_align_echo_center=False )
+        
 
 
     def _retrieve_recon_params(self, kwargs):
@@ -232,7 +233,7 @@ class BrukerSpSpEpiExp(object):
     def _deserialize_raw_fid(self, fid) -> np.ndarray:
         return (fid[0::2, ...] + 1j * fid[1::2, ...])
 
-    def _construct_k_space(self, fid, does_zerofilling=False, does_align_echo_center=False) -> List[np.ndarray, np.ndarray]:
+    def _construct_k_space(self) :
         dim_k_raw_ro, dim_k_raw_ph = self.param_dict['PVM_EncMatrix']
         dim_r_img_ro, dim_r_img_ph = self.param_dict['PVM_Matrix']
         k_space_encoding_length = (dim_k_raw_ph * dim_k_raw_ro)
