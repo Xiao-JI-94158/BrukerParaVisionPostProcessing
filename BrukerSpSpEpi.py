@@ -46,9 +46,9 @@ class BrukerSpSpEpiExp(object):
         self.param_dict      = (self._read_param_dicts(self.data_paths_dict['method']) | self._read_param_dicts(self.data_paths_dict['acqp'])) 
         self.transient_space = self._generate_transient_space()  
         self._validate() 
-        self._load_fid()
-        self._construct_k_space()
-        self._reconstruct_r_image()
+
+        self._update_transient_space()
+
 
         
         
@@ -194,9 +194,20 @@ class BrukerSpSpEpiExp(object):
         _nbr_cs_offset = self.param_dict['NumChemicalShifts']
         if ( _nbr_metabolite != _nbr_cs_offset ):
             raise ValueError( f'Number of metabolite names ({_nbr_metabolite}) provided by user does not match the number of chemical shift offsets ({_nbr_cs_offset}) in the raw data.' )
-    
-    def _reconstruct_transient_space(self):
+
         
+    def _update_time_pts(self):
+        return NotImplemented
+
+    def _update_transient_space(self):
+
+        
+        self._update_time_pts()
+        self._load_fid()
+        self._construct_k_space()
+        self._reconstruct_r_image()
+
+
         _nbr_metabolite = self.param_dict["NumChemicalShifts"]
         _nbr_repetition = self.param_dict["NR"]
         _nbr_time_pts = int(np.ceil( _nbr_repetition / float(_nbr_metabolite)))
@@ -227,6 +238,8 @@ class BrukerSpSpEpiExp(object):
         fid = self._deserialize_raw_fid(fid)
 
         _nbr_repetition = self.param_dict['NR']
+        _nbr_chem_shift   = self.param_dict['NumChemicalShifts']
+        _nbr_time_groups = int(np.ceil(_nbr_repetition/float(_nbr_repetition)))
         fid = np.array_split(fid, )
 
 
