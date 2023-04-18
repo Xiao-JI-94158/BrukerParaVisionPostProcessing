@@ -201,7 +201,7 @@ class BrukerSpSpEpiExp(object):
 
     def _update_transient_space(self):
 
-        
+
         self._update_time_pts()
         self._load_fid()
         self._construct_k_space()
@@ -242,6 +242,10 @@ class BrukerSpSpEpiExp(object):
         _nbr_time_groups = int(np.ceil(_nbr_repetition/float(_nbr_repetition)))
         fid = np.array_split(fid, )
 
+
+        return NotImplemented
+    
+    def _load_2dseq(self):
 
         return NotImplemented
     
