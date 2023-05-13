@@ -75,10 +75,10 @@ class BrukerSpSpEpiExp(object):
         self.post_processing_params = self._update_post_processing_params(kwargs)
 
         self.dataset = {"DATA": None, "PARAM": None}
+
         self._validate_dataset_files(exp_dataset_path)
 
-        self._update_dataset_param()
-       
+        self._update_dataset_param()       
         
         self._update_dataset_data()
         
@@ -89,6 +89,7 @@ class BrukerSpSpEpiExp(object):
 
     def _update_post_processing_params(self, kwargs):
         """
+        parse possible tags for post-processing
         """
         recon_params = copy.deepcopy(POST_PROCESSING_PARAMETERS)
         recon_params.update((k, kwargs[k]) for k in (recon_params.keys() & kwargs.keys()) )
@@ -96,6 +97,7 @@ class BrukerSpSpEpiExp(object):
 
     def _validate_dataset_files(self, exp_dataset_path):
         """
+        Confirm that the given path of experimental dataset is valid
         """
         if (not (os.path.isdir(exp_dataset_path))):
             raise OSError(f"Given directory of Experiment ({exp_dataset_path}) does not exist")
@@ -107,12 +109,18 @@ class BrukerSpSpEpiExp(object):
 
     def _validate_data_files(self, exp_dataset_path)->Dict:
         """
+        1.1 data files:
+            must        : fid
+            optional    : 2dseq
         """
         data_dict = RAW_DATA_SET        
         self.dataset['DATA'] = self._complete_abs_path(data_dict, exp_dataset_path)                
 
     def _validate_param_files(self, exp_dataset_path)->Dict:
         """
+        1.2 param files:
+            must        : acqp, method, visu_pars
+            optional    : acqu, acqus, procs, reco        
         """
         param_dict = RAW_PARAM_SET
         self.dataset['PARAM'] = self._complete_abs_path(param_dict, exp_dataset_path)
@@ -163,7 +171,7 @@ class BrukerSpSpEpiExp(object):
 
     def _read_param_dicts(self, param_file_path):
         """
-        Read a Bruker MRI experiment's method or acqp file to a dictionary.
+        Read a Bruker MRI experiment's parameter files to a dictionary.
 
         Ref: https://github.com/jdoepfert/brukerMRI
         """
@@ -262,6 +270,8 @@ class BrukerSpSpEpiExp(object):
 
     def _calc_time_pts(self):
         """
+        Calculate the time point of acquisition for each EPI transient.
+        The first transient starts at <0.0 second>
         """
         _nbr_metabolite = self.dataset['PARAM']["NumChemicalShifts"]
         _nbr_repetition = self.dataset['PARAM']["NR"]
@@ -274,6 +284,7 @@ class BrukerSpSpEpiExp(object):
 
     def _process_fid(self):
         """
+        Read binary fid into cmplx128 format, and partition into transients.
         """
         raw_fids = self._read_raw_fid()
         raw_fids = self._deserialize_raw_fid(raw_fids)
@@ -292,7 +303,9 @@ class BrukerSpSpEpiExp(object):
         return fid
     
     def _deserialize_raw_fid(self, fid) -> np.ndarray:
-        return (fid[0::2, ...] + 1j * fid[1::2, ...])
+        fid = np.asarray(fid[0::2, ...] + 1j * fid[1::2, ...])
+        fid.astype(np.complex128)
+        return fid
 
     def _process_2dseq(self):
         """
