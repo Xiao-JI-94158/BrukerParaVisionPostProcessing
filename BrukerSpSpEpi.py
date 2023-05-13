@@ -6,7 +6,6 @@ from typing import List, Dict
 
 # Third-party packages
 import numpy as np
-import pandas as pd
 
 # In-house packages
 
