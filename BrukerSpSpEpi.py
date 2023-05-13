@@ -2,7 +2,7 @@
 import os
 import copy
 
-from typing import List
+from typing import List, Dict
 
 # Third-party packages
 import numpy as np
@@ -10,79 +10,157 @@ import pandas as pd
 
 # In-house packages
 
-RECONSTRUCTION_PARAMETERS = {
-    'does_zerofilling'          : False,
-    'does aligning_echo_center' : False
+POST_PROCESSING_PARAMETERS = {
+    'does_zerofill'             : False,
+    'does_align_echo_center'    : False,
+    'does_reconstruction'       : False,
+    'has_double_sampling'       : False
 }
 
-TRANSIENT_ENTRIES = {
-    "nbr_acquisition": None,
-    "time_pts"       : None,
-    "raw_fids"       : None,
-    "k_spaces_pos"   : None,
-    "k_spaces_neg"   : None,
-    "r_images_pos"   : None,
-    "r_images_neg"   : None,
-    "r_images_abs"   : None
+RAW_DATA_SET = {
+    'fid'       : 'fid',
+    # 'ser'       : 'ser',
+    # pdata subdir might not exist due to user config (not performing factory reconstruction)
+    '2dseq'     : 'pdata/1/2dseq',
 }
 
-DEFAULT_METABOLITES = ['Urea','Pyruvate','Lactate']
 
-TEST_CHEMICAL = ['Urea']
+RAW_PARAM_SET = {
+    'acqp'      : 'acqp',
+    'method'    : 'method',
+    'visu_pars' : 'visu_pars',
+    # pdata subdir might not exist due to user config (not performing factory reconstruction)
+    'procs'     : 'pdata/1/procs',
+    'reco'      : 'pdata/1/reco'
+}
+
+DATA_COLLECTION_TEMPLATE = {
+    'time_point_sec': None,
+    'fid': None,
+    '2dseq': None,
+    'k_space': None,
+    'r_image': None
+}
 
 class BrukerSpSpEpiExp(object):
     """
         Basic Class that that read, stores, and (post-)processes EPI data acquired from Spectral-Spatial Selective Excitation (SpSp_EPI)
+
+        Parameters:
+        -----------
+
+        exp_data_path: str
+            experimental data path
+
     """
     
-    def __init__(self, exp_data_path:str, metabolite_list:List[str] = DEFAULT_METABOLITES, **kwargs) -> None:
+    def __init__(self, exp_dataset_path:str, **kwargs) -> None:
         """
+        0. update params for post-processing:
+    
+        1. validate experiment dataset:
+            1.1 data files:
+                must        : fid
+                optional    : 2dseq
+            1.2 param files:
+                must        : acqp, method, visu_pars
+                optional    : acqu, acqus, procs, reco
+        
+        2. update dataset_dict['PARAM']:
+
+        3. update data_collection:
+
+        4. perform reconstruction:
+
         """
-        self.metabolite_list = metabolite_list
-        self.data_paths_dict = self._update_data_paths(exp_data_path)             
-        
-        self.recon_params    = self._retrieve_recon_params(kwargs)
+        self.post_processing_params = self._update_post_processing_params(kwargs)
 
-        self.param_dict      = (self._read_param_dicts(self.data_paths_dict['method']) | self._read_param_dicts(self.data_paths_dict['acqp'])) 
-        self.transient_space = self._generate_transient_space()  
-        self._validate() 
+        self.dataset = {"DATA": None, "PARAM": None}
+        self._validate_dataset_files(exp_dataset_path)
 
-        self._update_transient_space()
-
-
-        
-        
-
-
-    def _retrieve_recon_params(self, kwargs):
-        recon_params = copy.deepcopy(RECONSTRUCTION_PARAMETERS)
-        recon_params.update((k, kwargs[k]) for k in (recon_params.keys() & kwargs.keys()) )
-        return recon_params
-
-
-
-    def _update_data_paths(self, exp_data_path)->None:
-        data_paths_dict = {}
-        
-        if (not (os.path.isdir(exp_data_path))):
-            raise NotADirectoryError("Given directory of Experiment does not exist")
-
-        fid_path =  os.path.join(exp_data_path, "fid")
-        if (not (os.path.isfile(fid_path))):
-            raise FileNotFoundError("Cannot find FID file in the given directory of Experiment")
-        data_paths_dict['fid'] = fid_path
-
-        method_path = os.path.join(exp_data_path, "method")
-        if (not (os.path.isfile(method_path))):
-            raise FileNotFoundError("Cannot find METHOD file in the given directory of Experiment")
-        data_paths_dict['method'] = method_path
-
-        acqp_path = os.path.join(exp_data_path, "acqp")
-        if (not (os.path.isfile(acqp_path))):
-            raise FileNotFoundError("Cannot find ACQP file in the given directory of Experiment")
-        data_paths_dict['acqp'] = acqp_path
-        return data_paths_dict
+        self._update_dataset_param()
        
+        
+        self._update_dataset_data()
+        
+        if self.post_processing_params['does_reconstruction']:
+            self._update_k_space()
+            self._update_r_image()
+
+
+    def _update_post_processing_params(self, kwargs):
+        """
+        """
+        recon_params = copy.deepcopy(POST_PROCESSING_PARAMETERS)
+        recon_params.update((k, kwargs[k]) for k in (recon_params.keys() & kwargs.keys()) )
+        return recon_params  
+
+    def _validate_dataset_files(self, exp_dataset_path):
+        """
+        """
+        if (not (os.path.isdir(exp_dataset_path))):
+            raise OSError(f"Given directory of Experiment ({exp_dataset_path}) does not exist")
+        
+        self._validate_data_files(exp_dataset_path)
+        self._validate_param_files(exp_dataset_path)
+
+        
+
+    def _validate_data_files(self, exp_dataset_path)->Dict:
+        """
+        """
+        data_dict = RAW_DATA_SET        
+        self.dataset['DATA'] = self._complete_abs_path(data_dict, exp_dataset_path)                
+
+    def _validate_param_files(self, exp_dataset_path)->Dict:
+        """
+        """
+        param_dict = RAW_PARAM_SET
+        self.dataset['PARAM'] = self._complete_abs_path(param_dict, exp_dataset_path)
+
+    def _complete_abs_path(self, dp_dict, exp_dataset_path):
+        """
+        """
+        ret_dict = copy.deepcopy(dp_dict)
+        for key, value in ret_dict.items():
+            abs_path = os.path.join(exp_dataset_path, value)
+
+            if ('pdata' in value):
+                if (os.path.isfile(abs_path)):
+                    ret_dict[key] = abs_path
+                else:
+                    ret_dict[key] = None
+            else:
+                if (os.path.isfile(abs_path)):
+                    ret_dict[key] = abs_path
+                else:
+                    raise FileNotFoundError(f"Cannot find {key} file ({abs_path}) in the given directory of Experiment")
+        return ret_dict
+
+
+    def _update_dataset_param(self):
+        """
+        """
+        param_dict = {}
+        for key, value in self.dataset['PARAM'].items():
+            temp_dict = self._read_param_dicts(value)
+            param_dict = (param_dict | temp_dict)
+        
+        self.dataset['PARAM'] = param_dict
+        
+    
+    def _update_dataset_data(self):
+        data = DATA_COLLECTION_TEMPLATE
+
+        data['time_point_sec'] = self._calc_time_pts()
+
+        data['fid'] = self._process_fid()
+
+        if self.dataset['DATA']['2dseq']:
+            data['2dseq'] = self._process_2dseq()
+        
+        self.dataset['DATA'] = data
+        
 
     def _read_param_dicts(self, param_file_path):
         """
@@ -183,185 +261,172 @@ class BrukerSpSpEpiExp(object):
 
         return result    
 
-    def _generate_transient_space(self) -> dict[str, pd.DataFrame]:
-        transient_space = {}
-        for metabolite in self.metabolite_list:
-            transient_space[metabolite] = copy.deepcopy(TRANSIENT_ENTRIES)
-        return transient_space
-
-    def _validate(self):
-        _nbr_metabolite = len(self.metabolite_list)
-        _nbr_cs_offset = self.param_dict['NumChemicalShifts']
-        if ( _nbr_metabolite != _nbr_cs_offset ):
-            raise ValueError( f'Number of metabolite names ({_nbr_metabolite}) provided by user does not match the number of chemical shift offsets ({_nbr_cs_offset}) in the raw data.' )
-
-        
-    def _update_time_pts(self):
-        return NotImplemented
-
-    def _update_transient_space(self):
-
-
-        self._update_time_pts()
-        self._load_fid()
-        self._construct_k_space()
-        self._reconstruct_r_image()
-
-
-        _nbr_metabolite = self.param_dict["NumChemicalShifts"]
-        _nbr_repetition = self.param_dict["NR"]
+    def _calc_time_pts(self):
+        """
+        """
+        _nbr_metabolite = self.dataset['PARAM']["NumChemicalShifts"]
+        _nbr_repetition = self.dataset['PARAM']["NR"]
         _nbr_time_pts = int(np.ceil( _nbr_repetition / float(_nbr_metabolite)))
-        _TR_sec = self.param_dict['ACQ_repetition_time'] / 1000
-        time_pts = np.tile(_TR_sec, reps=_nbr_repetition) + np.tile(self.param_dict['Vd1List'], reps=_nbr_time_pts) # time-interval list
+        _TR_sec = self.dataset['PARAM']['ACQ_repetition_time'] / 1000
+        time_pts = np.tile(_TR_sec, reps=_nbr_repetition) + np.tile(self.dataset['PARAM']['Vd1List'], reps=_nbr_time_pts) # time-interval list
         time_pts = np.concatenate((np.array([0]), time_pts[:-1:])) # ACQ starts at time=0!
         time_pts = np.cumsum(time_pts) # time of transient excution is cumulative sum of time-intervals between consecutive transients
-                
+        return np.asarray(time_pts)
+
+    def _process_fid(self):
+        """
+        """
         raw_fids = self._read_raw_fid()
         raw_fids = self._deserialize_raw_fid(raw_fids)
-        raw_fids = np.array_split(raw_fids, _nbr_repetition)
-        #fid = fid.reshape( _nbr_time_pts, _nbr_metabolite, -1)
-        #fid = np.swapaxes(fid, axis1=0, axis2=1)
-        #fid = np.squeeze(fid)
-
-        pos_k_spaces, neg_k_spaces = zip(*map(self._construct_k_space(), raw_fids))
-
-        def ft2d(x): return np.fft.fftshift(np.fft.fft2(x))
-
-        pos_r_iamges = [ft2d(k_space_pos) for k_space_pos in pos_k_spaces]
-        neg_r_iamges = [ft2d(k_space_neg) for k_space_neg in neg_k_spaces]
-
-        
-        return NotImplemented
-
-    def _load_fid(self):
-        fid = self.+_read_raw_fid()
-        fid = self._deserialize_raw_fid(fid)
-
-        _nbr_repetition = self.param_dict['NR']
-        _nbr_chem_shift   = self.param_dict['NumChemicalShifts']
-        _nbr_time_groups = int(np.ceil(_nbr_repetition/float(_nbr_repetition)))
-        fid = np.array_split(fid, )
-
-
-        return NotImplemented
-    
-    def _load_2dseq(self):
-
-        return NotImplemented
-    
+        raw_fids = np.asarray(np.array_split(raw_fids, self.dataset['PARAM']["NR"]))
+        return raw_fids
 
     def _read_raw_fid(self) -> np.ndarray:
-        _raw_fid_dtype = self.param_dict['GO_raw_data_format']
+        """
+        """
+        _raw_fid_dtype = self.dataset['PARAM']['GO_raw_data_format']
         if (_raw_fid_dtype == 'GO_32BIT_SGN_INT') :
-            fid = np.fromfile(file=self.data_paths_dict['fid'], dtype='int32')
+            fid = np.fromfile(file=self.dataset['DATA']['fid'], dtype='int32')
 
         else:
             raise TypeError( f'Raw FID data in Unknown Datatype ({_raw_fid_dtype})' )
-        
         return fid
     
     def _deserialize_raw_fid(self, fid) -> np.ndarray:
         return (fid[0::2, ...] + 1j * fid[1::2, ...])
 
-    def _construct_k_space(self) :
-        dim_k_raw_ro, dim_k_raw_ph = self.param_dict['PVM_EncMatrix']
-        dim_r_img_ro, dim_r_img_ph = self.param_dict['PVM_Matrix']
+    def _process_2dseq(self):
+        """
+        """
+        _raw_2dseq_dtype = self.dataset['PARAM']['VisuCoreWordType']
+        _raw_2dseq_b_order = self.dataset['PARAM']['VisuCoreByteOrder']
+
+        if ((_raw_2dseq_dtype == '_16BIT_SGN_INT') and (_raw_2dseq_b_order == 'littleEndian')):
+            raw_2dseq = np.fromfile(file=self.dataset['DATA']['2dseq'], dtype='int16')
+        
+        data_shape = np.append(self.dataset['PARAM']['NR'], self.dataset['PARAM']["PVM_Matrix"])
+
+        raw_2dseq = np.reshape(raw_2dseq, data_shape)
+        
+        return raw_2dseq
+    
+    def _update_k_space(self):
+        """
+        """
+        k_space_pos = []
+        k_space_neg = []
+        
+        dim_k_raw_ro, dim_k_raw_ph = self.dataset['PARAM']['PVM_EncMatrix']
+        dim_r_img_ro, dim_r_img_ph = self.dataset['PARAM']['PVM_Matrix']
         k_space_encoding_length = (dim_k_raw_ph * dim_k_raw_ro)
 
-        if (len(fid) == 2 * k_space_encoding_length):
-            """
-            When the length of FID doubles the length of raw k-space encoding,
-                We assume this is <Double Sampling> type EPI readout.
-                Under this assumption:
-                    No even-line-mirroring is performed, since the two samplings comes from Pos. and Neg lobe of EPI readout respectively.
-                    Raw k-space encoding is splited into two sub-k-spaces, the Pos and the Neg, for reconstruction, which has exactly opposite phases
-                    Echo-centers of readout lines in the two sub-k-spaces are aligned
-            """            
-            _fid_2d = np.reshape(fid, (dim_k_raw_ph, -1))
-            
-            _k_space_pos, _k_space_neg = self._split_fid_2d(_fid_2d)
+        for transient in self.dataset['DATA']['fid']:
+            if (len(transient) == 2 * k_space_encoding_length):
+                """
+                When the length of FID doubles the length of raw k-space encoding,
+                    We assume this is <Double Sampling> type EPI readout.
+                    Under this assumption:
+                        No even-line-mirroring is performed, since the two samplings comes from Pos. and Neg lobe of EPI readout respectively.
+                        Raw k-space encoding is splited into two sub-k-spaces, the Pos and the Neg, for reconstruction, which has exactly opposite phases
+                        Echo-centers of readout lines in the two sub-k-spaces are aligned
+                """   
 
-            if does_zerofilling:
-                _k_space_pos = self._zerofill_kspace(_k_space_pos)
-                _k_space_neg = self._zerofill_kspace(_k_space_neg)
-            
-            if does_align_echo_center:
-                _k_space_pos = self._align_echo_center(_k_space_pos)
+                self.post_processing_params['has_double_sampling'] = True
 
-                _k_space_neg = self._align_echo_center(_k_space_neg)
-                _k_space_neg = np.fliplr(_k_space_neg)
+                _transient_2d = np.reshape(transient, (dim_k_raw_ph, -1))
+                
+                _k_transient_pos, _k_transient_neg = self._split_fid_2d(_transient_2d, dim_k_raw_ro)
 
-        elif (len(fid) == k_space_encoding_length):
-            """
-            When the length of FID equals the length of raw k-space encoding,
-                It is conventional EPI readout.
-                Under this assumption:
-                    Even-line-mirroring is performed
-                    Align echo-centers of each line of readout
-            """
-            _k_space_neg = np.array([])
-            _k_space_pos = np.reshape(fid, (dim_k_raw_ph, dim_k_raw_ro))
-            _k_space_pos[1::2, ::] = _k_space_pos[1::2, ::-1]
-            if does_zerofilling:
-                _k_space_pos = self._zerofill_kspace(_k_space_pos)
-                _k_space_neg = self._zerofill_kspace(_k_space_neg)
-            
-            if does_align_echo_center:
-                _k_space_pos = self._align_echo_center(_k_space_pos)
-        else:
-            raise ValueError(f"Size of Raw FID ({np.shape(self.fid['deserialized'])}) is not equal to the size of partial-phased k-space ({k_space_encoding_length}), nor the double of it")
-        
-        return [_k_space_pos, _k_space_neg]
-        
+                if self.post_processing_params['does_zerofill']:
+                    _k_transient_pos = self._zerofill_k_transient(_k_transient_pos)
+                    _k_transient_neg = self._zerofill_k_transient(_k_transient_neg)
+                
+                if self.post_processing_params['does_align_echo_center']:
+                    _k_transient_pos = self._align_echo_center(_k_transient_pos)
+                    _k_transient_neg = self._align_echo_center(_k_transient_neg)
+                
+                _k_transient_neg = np.fliplr(_k_transient_neg)
 
-    def _zerofill_fid_2d(self, fid_2d):
-        nbr_zerofill_lines = self._exp_data_dim_dict['dim_r_image_ph'] - self._exp_data_dim_dict['dim_k_raw_ph']
-        zerofilled_fid_2d = np.pad(fid_2d, ((nbr_zerofill_lines, 0),(0, 0)), 'constant', constant_values=(0))
+                k_space_pos.append( _k_transient_pos)
+                k_space_neg.append( _k_transient_neg)
+
+            elif (len(transient) == k_space_encoding_length):
+                """
+                When the length of FID equals the length of raw k-space encoding,
+                    It is conventional EPI readout.
+                    Under this assumption:
+                        Even-line-mirroring is performed
+                        Align echo-centers of each line of readout
+                """
+                self.post_processing_params['has_double_sampling'] == False
+
+                
+                _k_transient_pos = np.reshape(transient, (dim_k_raw_ph, dim_k_raw_ro))
+                _k_transient_pos[1::2, ::] = _k_transient_pos[1::2, ::-1] # Even-line-mirroring
+
+                if self.post_processing_params['does_zerofill']:
+                    _k_transient_pos = self._zerofill_k_transient(_k_transient_pos)
+                    
+                if self.post_processing_params['does_align_echo_center']:
+                    _k_transient_pos = self._align_echo_center(_k_transient_pos)
+
+                k_space_pos.append( _k_transient_pos)
+                
+
+            else:
+                self.post_processing_params['has_double_sampling'] = None
+                raise ValueError(f"Size of Raw FID ({len(transient)}) is not equal to the size of partial-phased k-space ({k_space_encoding_length}), nor the double of it")
+
+
+        self.dataset['DATA']['k_space'] = {'Pos': np.asarray(k_space_pos), 'Neg':np.asarray(k_space_neg)}
+
+    def _split_fid_2d(self, fid_2d, dim_k_raw_ro):
+        """
+        """
+        fid_left  = fid_2d[..., :dim_k_raw_ro:]
+        fid_right = fid_2d[..., dim_k_raw_ro::]
+        return fid_left, fid_right
+    
+    def _zerofill_k_transient(self, fid_2d):
+        """
+        """
+        dim_k_raw_ro, dim_k_raw_ph = self.dataset['PARAM']['PVM_EncMatrix']
+        dim_r_img_ro, dim_r_img_ph = self.dataset['PARAM']['PVM_Matrix']
+
+        nbr_zerofill_ph = dim_r_img_ph - dim_k_raw_ph
+        nbr_zerofill_ro = dim_r_img_ro - dim_k_raw_ro
+
+        zerofilled_fid_2d = np.pad(fid_2d, ((nbr_zerofill_ph, nbr_zerofill_ro),(0, 0)), 'constant', constant_values=(0))
         return zerofilled_fid_2d
 
-    def _split_fid_2d(self, fid_2d):
-        fid_left  = fid_2d[...,:self._exp_data_dim_dict['dim_k_raw_ro']:]
-        fid_right = fid_2d[...,self._exp_data_dim_dict['dim_k_raw_ro']::]
-        return fid_left, fid_right
-
     def _align_echo_center(self, fid_2d):
-        
+        """
+        """
         for idx, line in enumerate(fid_2d):
             shift = 60 - np.argmax(np.abs(line))
             fid_2d[idx] = np.roll(line, shift)
         return fid_2d
 
-    def _reconstruct_r_image(self)->dict:
-        """
-        When the k_space_data has both Pos and Neg part
-            We assume this is <Double Sampling> type EPI readout.
-            Under this assumption:
-                FT for two sub-r-space image, the Pos and the Neg.
-                Yield the magnitude result from the addition of both magnitude images from the Pos and the Neg.
-        When the k_space_data has only Pos part
-            It is conventional EPI readout.
-            Under this assumption:
-                FT for r-space image
-                Yield the magnitude result
-        """
-        _r_space_data = {}
-        
-        _r_space_data["Pos"] = np.fft.fftshift(np.fft.fft2(self.k_space_data["Pos"]))
-        if ('Neg' in self.k_space_data.keys()):
-            _r_space_data["Neg"] = np.fft.fftshift(np.fft.fft2(self.k_space_data["Neg"]))
 
-        if ('Neg' in self.k_space_data.keys()):
-            _r_space_data["Mag"] = np.abs(_r_space_data["Pos"]) + np.abs(_r_space_data["Neg"])
-        else:
-            _r_space_data["Mag"] = np.abs(_r_space_data["Pos"])
+    def _update_r_image(self):
+        """
+        """
         
-        return _r_space_data
+        def ft2d(x): return np.fft.fftshift(np.fft.fft2(x))
 
-    def _calc_magnitude_proj(self)->dict:
-        magnitude_proj = {}
-        magnitude_proj['ro'] = np.sum(self.r_space_data['Mag'], axis=0)
-        magnitude_proj['ph'] = np.sum(self.r_space_data['Mag'], axis=1)
-        return magnitude_proj
+        r_image_pos = np.asarray([ft2d(k_transient) for k_transient in self.dataset['DATA']['k_space']['Pos']])
+
+        r_image_abs = np.abs(r_image_pos)
+
+        if self.dataset['DATA']['k_space']['Neg'].any():
+            r_image_neg = np.asarray([ft2d(k_transient) for k_transient in self.dataset['DATA']['k_space']['Neg']])
+            r_image_abs += np.abs(r_image_neg)
+
+        
+
+
+
+        self.dataset['DATA']['r_image'] = {'Pos': r_image_pos, 'Neg': r_image_neg, "Abs": r_image_abs}
     
 
 
