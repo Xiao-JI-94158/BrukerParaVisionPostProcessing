@@ -58,3 +58,6 @@ target/
 __pycache__/BrukerSpSpEpi.cpython-39.pyc
 __pycache__/BrukerSpSpEpi.cpython-310.pyc
 __pycache__/BrukerSpSpEpi.cpython-310.pyc
+
+./.ipynb_checkpoints
+./.vscode
