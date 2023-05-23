@@ -433,14 +433,26 @@ class BrukerSpSpEpiExp(object):
         if self.dataset['DATA']['k_space']['Neg'].any():
             r_image_neg = np.asarray([ft2d(k_transient) for k_transient in self.dataset['DATA']['k_space']['Neg']])
             r_image_abs += np.abs(r_image_neg)
-
-        
-
-
-
         self.dataset['DATA']['r_image'] = {'Pos': r_image_pos, 'Neg': r_image_neg, "Abs": r_image_abs}
     
 
+    def _generate_signum_matrix(self, data):
+        signum_tensor = copy.deepcopy(data)
+        signum_tensor = np.where(signum_tensor >=  1,  1, signum_tensor)
+        signum_tensor = np.where(signum_tensor <= -1, -1, signum_tensor)
+        signum_tensor = np.where( ((-1<signum_tensor)&(signum_tensor <1)), 0, signum_tensor)
+        return signum_tensor
+
+    def _homogenize_data_log(self, data, log_base=10):
+        signum_tensor = self._generate_signum_matrix(data)
+        if log_base == 10:
+            homogenized_data = np.log10(np.abs(data)) * signum_tensor
+        elif log_base == 2:
+            homogenized_data = np.log2(np.abs(data)) * signum_tensor
+        else:
+            homogenized_data = np.emath.logn(base=log_base, array=np.abs(data))
+
+        return homogenized_data
 
 
 
