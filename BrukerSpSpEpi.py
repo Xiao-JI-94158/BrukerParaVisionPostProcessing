@@ -359,6 +359,14 @@ class BrukerSpSpEpiExp(object):
                 
                 _k_transient_neg = np.fliplr(_k_transient_neg)
 
+                if (
+                    (self.dataset['PARAM']['ACQ_phase_encoding_mode'].split()[0]=="Read") 
+                        and
+                    (self.dataset['PARAM']['ACQ_phase_enc_start'][0]==-1)
+                    ):
+                    _k_transient_pos = np.flipud(_k_transient_pos)
+                    _k_transient_neg = np.flipud(_k_transient_neg)
+
                 k_space_pos.append( _k_transient_pos)
                 k_space_neg.append( _k_transient_neg)
 
@@ -381,6 +389,14 @@ class BrukerSpSpEpiExp(object):
                     
                 if self.post_processing_params['does_align_echo_center']:
                     _k_transient_pos = self._align_echo_center(_k_transient_pos)
+
+                if (
+                    (self.dataset['PARAM']['ACQ_phase_encoding_mode'].split()[0]=="Read") 
+                        and
+                    (self.dataset['PARAM']['ACQ_phase_enc_start'][0]==-1)
+                    ):
+                    print("upflip")
+                    _k_transient_pos = np.flipud(_k_transient_pos)
 
                 k_space_pos.append( _k_transient_pos)
                 
@@ -433,6 +449,8 @@ class BrukerSpSpEpiExp(object):
         if self.dataset['DATA']['k_space']['Neg'].any():
             r_image_neg = np.asarray([ft2d(k_transient) for k_transient in self.dataset['DATA']['k_space']['Neg']])
             r_image_abs += np.abs(r_image_neg)
+        else:
+            r_image_neg = None
         self.dataset['DATA']['r_image'] = {'Pos': r_image_pos, 'Neg': r_image_neg, "Abs": r_image_abs}
     
 
@@ -453,6 +471,14 @@ class BrukerSpSpEpiExp(object):
             homogenized_data = np.emath.logn(base=log_base, array=np.abs(data))
 
         return homogenized_data
+
+    def rearrange_time_series(self):
+        return NotImplemented  
+
+
+              
+
+
 
 
 
